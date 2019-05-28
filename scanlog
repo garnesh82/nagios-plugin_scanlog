@@ -1,0 +1,67 @@
+#!/bin/bash
+
+# NAGIOS PLUGIN - LOG SCANNER 
+# UNIX WORLD
+
+# ARGUMENTS
+FILENAME=$1
+STRING=$2
+
+# TRESHOLD
+T_WARNING=1
+T_CRITICAL=1
+
+# EXIT CODES
+WARNING_STATUS=1
+CRITICAL_STATUS=2
+OK_STATUS=0
+
+WORKING_DIR=/tmp
+UNIQUE=`echo $FILENAME | sed -e "s/\//_/g"`
+UNIQUE1=`echo $STRING | sed -e "s/ /_/g"`
+
+CHECKPOINTA=${WORKING_DIR}/${UNIQUE1}A_${UNIQUE}
+CHECKPOINTB=${WORKING_DIR}/${UNIQUE1}B_${UNIQUE}
+
+if [ $# -lt 2 ]; then
+		echo "$0 <LogFileName> <SearchString>"
+		exit ${CRITICAL_STATUS}
+fi
+
+if [ ! -f ${CHECKPOINTA} ]; then
+		echo "0" > ${CHECKPOINTA}
+fi
+
+if [ ! -f ${FILENAME} ]; then
+		echo "WARNING: Log file missing"
+		exit ${OK_STATUS}
+fi
+
+FILE_LINE_COUNT=`wc -l ${FILENAME} | awk '{print $1}'`
+echo ${FILE_LINE_COUNT} > ${CHECKPOINTB}
+VALUE1=`cat ${CHECKPOINTA}`
+VALUE2=`cat ${CHECKPOINTB}`
+VALUE3=`echo "${VALUE1}+1" | bc`
+
+if [ ${VALUE1} -gt ${VALUE2} ]; then
+		echo "INFO: Log file was rotated!"
+		echo ${FILE_LINE_COUNT} > ${CHECKPOINTA}
+		exit ${OK_STATUS}
+elif [ ${VALUE1} -eq ${VALUE2} ]; then
+		echo "INFO: Log file was not updated!"
+		echo ${FILE_LINE_COUNT} > ${CHECKPOINTA}
+		exit ${OK_STATUS}
+else
+		echo ${FILE_LINE_COUNT} > ${CHECKPOINTA}
+		SCAN=`sed -n "${VALUE3},${VALUE2}p" $FILENAME | grep -i "${STRING}" | wc -l | sed -e 's/ //g'`
+		PERF=`echo "hit=${SCAN};${T_WARNING};${T_CRITICAL};"`
+
+	if [ ${SCAN} -ge ${T_CRITICAL} ]; then
+		echo "CRITICAL: String-->(${STRING}) found in ${FILENAME} Hit:(${SCAN})|${PERF}"
+		exit ${CRITICAL_STATUS}
+	else
+		echo "OK: Everything OK!|${PERF}"
+		exit ${OK_STATUS}
+	fi
+fi
+
